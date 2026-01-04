@@ -60,10 +60,6 @@ class SnoreDetectionService : Service() {
     private var isTrackingSnore = false
     private var detectionPausedUntil: Long = 0
 
-    // Add startup cooldown to prevent false positives from initialization noise
-    private var serviceStartTime: Long = 0
-    private val STARTUP_COOLDOWN_MS = 3000L // Ignore detections for first 3 seconds
-
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -122,11 +118,6 @@ class SnoreDetectionService : Service() {
     }
 
     private fun startAudioAnalysis() {
-        serviceStartTime = System.currentTimeMillis()
-        // Initialize detection pause to cover startup cooldown period
-        // This prevents any vibration during the startup cooldown
-        detectionPausedUntil = serviceStartTime + STARTUP_COOLDOWN_MS
-
         audioRecorder = AudioRecorder(sampleRate = SAMPLE_RATE)
         audioRecorder?.setCallback(object : AudioRecorder.AudioDataCallback {
             override fun onAudioData(data: ShortArray) {
@@ -147,18 +138,6 @@ class SnoreDetectionService : Service() {
     }
 
     private fun processAudioData(data: ShortArray) {
-        // Check for startup cooldown FIRST - ignore ALL processing during first 5 seconds
-        if (System.currentTimeMillis() - serviceStartTime < STARTUP_COOLDOWN_MS) {
-            // Broadcast 0 amplitude during startup to keep graph clean
-            val ampIntent = Intent(ACTION_AMPLITUDE_UPDATE).apply {
-                putExtra(EXTRA_AMPLITUDE, 0f)
-            }
-            LocalBroadcastManager.getInstance(this).sendBroadcast(ampIntent)
-            // Also reset snore tracking to prevent immediate trigger after cooldown
-            resetSnoreTracking()
-            return
-        }
-
         val rms = AudioUtils.calculateRMS(data)
 
         // Get current settings from preferences
@@ -265,7 +244,6 @@ class SnoreDetectionService : Service() {
         // Reset detection state
         resetSnoreTracking()
         detectionPausedUntil = 0
-        serviceStartTime = 0
         if (::sessionManager.isInitialized) {
             sessionManager.stopSession()
         }
