@@ -1,6 +1,7 @@
 package com.jinbo.smartsleep.navigation
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Home
@@ -8,8 +9,13 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.scale
 import androidx.navigation.NavController
 import com.jinbo.smartsleep.ui.theme.AppDimens
 
@@ -64,11 +70,14 @@ fun SmartSleepBottomNav(
             val isSelected = currentRoute == item.screen.route ||
                             (item.screen == Screen.Home && currentRoute?.startsWith("session_detail") == true)
 
+            var buttonScale by remember { mutableStateOf(1f) }
+
             NavigationBarItem(
                 icon = {
                     Icon(
                         imageVector = item.icon,
-                        contentDescription = item.label
+                        contentDescription = item.label,
+                        modifier = Modifier.scale(buttonScale)
                     )
                 },
                 label = {
@@ -81,6 +90,13 @@ fun SmartSleepBottomNav(
                 onClick = {
                     // Navigate to the selected screen
                     if (currentRoute != item.screen.route) {
+                        // Scale down animation
+                        buttonScale = 0.9f
+                        // Reset scale after animation
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            buttonScale = 1f
+                        }, 100)
+
                         navController.navigate(item.screen.route) {
                             // Pop up to the start destination of the graph to
                             // avoid building up a large stack of destinations
