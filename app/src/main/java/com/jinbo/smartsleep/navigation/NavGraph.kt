@@ -56,7 +56,11 @@ fun SmartSleepNavHost(
 
         // Statistics Screen - Analytics and trends
         composable(route = Screen.Statistics.route) {
-            StatisticsScreen()
+            StatisticsScreen(
+                onSessionClick = { sessionId ->
+                    navController.navigate(Screen.SessionDetail.createRoute(sessionId))
+                }
+            )
         }
 
         // Settings Screen - App configuration
