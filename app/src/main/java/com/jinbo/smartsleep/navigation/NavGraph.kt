@@ -2,6 +2,12 @@ package com.jinbo.smartsleep.navigation
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -31,8 +37,8 @@ fun SmartSleepNavHost(
         navController = navController,
         startDestination = startDestination,
         modifier = modifier,
-        enterTransition = { fadeIn() },
-        exitTransition = { fadeOut() }
+        enterTransition = { slideIntoContainer() },
+        exitTransition = { slideOutOfContainer() }
     ) {
         // Home Screen - Main monitoring interface
         composable(route = Screen.Home.route) {
@@ -89,11 +95,32 @@ fun SmartSleepNavHost(
     }
 }
 
-// Transition animations
-private fun fadeIn(): EnterTransition {
-    return androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300))
+/**
+ * Enhanced enter transition with slide and fade
+ */
+private fun slideIntoContainer(): EnterTransition {
+    return slideInHorizontally(
+        initialOffsetX = { it / 4 }, // Slide in from the right by 25% of screen width
+        animationSpec = tween(
+            durationMillis = 300,
+            easing = LinearEasing
+        )
+    ) + fadeIn(
+        animationSpec = tween(300)
+    )
 }
 
-private fun fadeOut(): ExitTransition {
-    return androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+/**
+ * Enhanced exit transition with slide and fade
+ */
+private fun slideOutOfContainer(): ExitTransition {
+    return slideOutHorizontally(
+        targetOffsetX = { -it / 4 }, // Slide out to the left by 25% of screen width
+        animationSpec = tween(
+            durationMillis = 300,
+            easing = LinearEasing
+        )
+    ) + fadeOut(
+        animationSpec = tween(300)
+    )
 }
