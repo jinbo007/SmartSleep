@@ -1,7 +1,8 @@
 package com.jinbo.smartsleep.viewmodel
 
 import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.jinbo.smartsleep.data.SessionRepository
 import com.jinbo.smartsleep.data.TimePeriod
@@ -16,9 +17,9 @@ import kotlinx.coroutines.launch
 /**
  * ViewModel for Statistics screen
  */
-class StatisticsViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val repository = SessionRepository(application)
+class StatisticsViewModel(
+    private val repository: SessionRepository
+) : ViewModel() {
 
     // Selected time period
     private val _selectedPeriod = MutableStateFlow(TimePeriod.SEVEN_DAYS)
@@ -75,6 +76,19 @@ class StatisticsViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun refresh() {
         loadData()
+    }
+
+    companion object {
+        fun provideFactory(repository: SessionRepository): ViewModelProvider.Factory =
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                    if (modelClass.isAssignableFrom(StatisticsViewModel::class.java)) {
+                        return StatisticsViewModel(repository) as T
+                    }
+                    throw IllegalArgumentException("Unknown ViewModel class ${modelClass.name}")
+                }
+            }
     }
 }
 

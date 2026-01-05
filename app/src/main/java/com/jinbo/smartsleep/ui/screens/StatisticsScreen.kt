@@ -24,7 +24,11 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun StatisticsScreen(
-    statisticsViewModel: StatisticsViewModel = viewModel(),
+    statisticsViewModel: StatisticsViewModel = viewModel(
+        factory = StatisticsViewModel.provideFactory(
+            SessionRepository(LocalContext.current.applicationContext)
+        )
+    ),
     onSessionClick: (Long) -> Unit = {}
 ) {
     val uiState by statisticsViewModel.uiState.collectAsState()
