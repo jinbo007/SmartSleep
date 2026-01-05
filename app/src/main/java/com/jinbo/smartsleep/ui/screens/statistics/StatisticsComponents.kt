@@ -230,7 +230,8 @@ fun DailyTrendChart(
                 }
             } else {
                 // Simple bar visualization
-                val maxCount = dailyCounts.maxOfOrNull { it.dailyCount } ?: 1
+                // Prevent NaN by ensuring maxCount is at least 1
+                val maxCount = (dailyCounts.maxOfOrNull { it.dailyCount } ?: 0).coerceAtLeast(1)
 
                 Column(
                     verticalArrangement = Arrangement.spacedBy(AppDimens.spacing_2)
