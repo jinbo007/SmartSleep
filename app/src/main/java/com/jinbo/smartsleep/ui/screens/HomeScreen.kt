@@ -83,19 +83,10 @@ fun HomeScreen(
                     // Snore Count Card
                     StatCard(
                         icon = Icons.Default.ShowChart,
-                        label = "Snore Events",
+                        label = "Snore Count",
                         value = uiState.snoreCount.toString(),
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.primary
-                    )
-
-                    // Max Amplitude Card
-                    StatCard(
-                        icon = Icons.Default.Bedtime,
-                        label = "Max Intensity",
-                        value = uiState.maxAmplitude.toInt().toString(),
-                        modifier = Modifier.weight(1f),
-                        color = MaterialTheme.colorScheme.secondary
                     )
                 }
             }

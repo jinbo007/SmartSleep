@@ -49,14 +49,6 @@ fun QuickActionsCard(
                 .padding(AppDimens.card_padding),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "Quick Actions",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.align(Alignment.Start)
-            )
-
-            Spacer(modifier = Modifier.height(AppDimens.spacing_4))
-
             if (isMonitoring) {
                 // Stop Monitoring Button
                 ActionButton(
