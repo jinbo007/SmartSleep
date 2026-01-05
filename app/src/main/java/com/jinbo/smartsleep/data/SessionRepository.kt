@@ -91,6 +91,13 @@ class SessionRepository(context: Context) {
     }
 
     /**
+     * Get a specific session by ID
+     */
+    suspend fun getSessionById(sessionId: Long): SessionEntity? {
+        return sessionDao.getSessionById(sessionId)
+    }
+
+    /**
      * Calculate time range for a given period
      * @return Pair of (startTime, endTime) in milliseconds
      */

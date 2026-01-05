@@ -83,6 +83,12 @@ interface SessionDao {
     suspend fun getMostRecentSession(): SessionEntity?
 
     /**
+     * Get a specific session by ID
+     */
+    @Query("SELECT * FROM sessions WHERE id = :sessionId")
+    suspend fun getSessionById(sessionId: Long): SessionEntity?
+
+    /**
      * Delete old sessions (older than specified timestamp)
      */
     @Query("DELETE FROM sessions WHERE startTime < :timestamp")
