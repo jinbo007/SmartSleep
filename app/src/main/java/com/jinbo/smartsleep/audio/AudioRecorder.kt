@@ -58,30 +58,41 @@ class AudioRecorder(
                 while (isRecording) {
                     val readResult = audioRecord?.read(buffer, 0, bufferSize) ?: 0
                     if (readResult > 0) {
-                        callback?.onAudioData(buffer.copyOf())
+                        // CRITICAL FIX: Pass buffer directly without copying
+                        // The callback must process data immediately before next read
+                        callback?.onAudioData(buffer)
                     }
                 }
-            }
-            recordingThread?.start()
+            }.apply { start() }
         } catch (e: Exception) {
             Log.e("AudioRecorder", "Error starting recording", e)
+            isRecording = false
         }
     }
 
     fun stopRecording() {
         isRecording = false
+
+        // Wait for thread to finish with timeout
         try {
-            recordingThread?.join()
+            recordingThread?.join(1000) // 1 second timeout
         } catch (e: InterruptedException) {
-            e.printStackTrace()
+            Log.e("AudioRecorder", "Interrupted while waiting for recording thread", e)
         }
 
+        // Clear thread reference
+        recordingThread = null
+
+        // Release audio resources
         try {
             audioRecord?.stop()
             audioRecord?.release()
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("AudioRecorder", "Error releasing AudioRecord", e)
         }
         audioRecord = null
+
+        // Clear callback to prevent memory leaks
+        callback = null
     }
 }

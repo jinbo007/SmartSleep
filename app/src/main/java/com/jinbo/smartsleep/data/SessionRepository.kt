@@ -26,17 +26,16 @@ class SessionRepository(context: Context) {
     }
 
     /**
-     * Save a completed session to database
+     * Create a new session in database and return its ID
+     * Used when starting monitoring to get ID for amplitude samples and recordings
      */
-    suspend fun saveSession(
+    suspend fun createSession(
         startTime: Long,
         endTime: Long,
         snoreCount: Int,
         maxAmplitude: Float
     ): Long {
         val durationMinutes = ((endTime - startTime) / MILLIS_IN_MINUTE).toInt()
-
-        // Calculate start of day for easier date-based queries
         val dateTimestamp = getStartOfDay(startTime)
 
         val session = SessionEntity(
@@ -49,6 +48,45 @@ class SessionRepository(context: Context) {
         )
 
         return sessionDao.insertSession(session)
+    }
+
+    /**
+     * Update an existing session
+     */
+    suspend fun updateSession(
+        sessionId: Long,
+        startTime: Long,
+        endTime: Long,
+        snoreCount: Int,
+        maxAmplitude: Float
+    ) {
+        val durationMinutes = ((endTime - startTime) / MILLIS_IN_MINUTE).toInt()
+        val dateTimestamp = getStartOfDay(startTime)
+
+        val session = SessionEntity(
+            id = sessionId,
+            startTime = startTime,
+            endTime = endTime,
+            snoreCount = snoreCount,
+            maxAmplitude = maxAmplitude,
+            dateTimestamp = dateTimestamp,
+            durationMinutes = durationMinutes
+        )
+
+        sessionDao.updateSession(session)
+    }
+
+    /**
+     * Save a completed session to database
+     * @deprecated Use createSession and updateSession instead
+     */
+    suspend fun saveSession(
+        startTime: Long,
+        endTime: Long,
+        snoreCount: Int,
+        maxAmplitude: Float
+    ): Long {
+        return createSession(startTime, endTime, snoreCount, maxAmplitude)
     }
 
     /**

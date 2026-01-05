@@ -13,7 +13,8 @@ import androidx.room.PrimaryKey
     tableName = "amplitude_samples",
     indices = [
         Index(value = ["sessionId"]),
-        Index(value = ["timestamp"])
+        Index(value = ["timestamp"]),
+        Index(value = ["sessionId", "isSnore"]) // Composite index for snore event queries
     ],
     foreignKeys = [
         ForeignKey(

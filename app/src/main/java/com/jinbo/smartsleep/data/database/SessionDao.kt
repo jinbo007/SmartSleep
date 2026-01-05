@@ -2,6 +2,7 @@ package com.jinbo.smartsleep.data.database
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.Update
 import androidx.room.Query
 import kotlinx.coroutines.flow.Flow
 
@@ -16,6 +17,12 @@ interface SessionDao {
      */
     @Insert
     suspend fun insertSession(session: SessionEntity): Long
+
+    /**
+     * Update an existing session
+     */
+    @Update
+    suspend fun updateSession(session: SessionEntity)
 
     /**
      * Get all sessions, ordered by start time (newest first)

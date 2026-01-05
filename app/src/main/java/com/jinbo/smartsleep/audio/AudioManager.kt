@@ -8,13 +8,15 @@ import java.io.IOException
 
 /**
  * Manages audio recording for snore events
+ *
+ * STRATEGY: Record for a fixed duration when snore is detected
+ * - Records 20 seconds around the snore event
+ * - Simpler and more reliable than circular buffer approach
  */
 class AudioManager(private val context: Context) {
 
     companion object {
-        private const val RECORDING_DURATION_MS = 20000L // 20 seconds (10s before + 10s after)
-        private const val PRE_SNORE_SECONDS = 10000 // 10 seconds before detection
-        private const val POST_SNORE_SECONDS = 10000 // 10 seconds after detection
+        const val RECORDING_DURATION_MS = 20000L // 20 seconds total
     }
 
     private var mediaRecorder: MediaRecorder? = null
@@ -73,8 +75,8 @@ class AudioManager(private val context: Context) {
     }
 
     /**
-     * Stop recording and trim to desired duration
-     * @param snoreTimestamp The timestamp when snore was detected (center point)
+     * Stop recording and return file info
+     * @param snoreTimestamp The timestamp when snore was detected (not currently used, kept for API compatibility)
      * @return Pair of (filePath, actualDurationMs)
      */
     fun stopRecording(snoreTimestamp: Long): Pair<String, Long>? {
@@ -90,9 +92,6 @@ class AudioManager(private val context: Context) {
             val filePath = currentRecordingFile?.absolutePath
             val actualDuration = System.currentTimeMillis() - recordingStartTime
 
-            // TODO: Implement audio trimming to keep only 10s before and 10s after snore
-            // For now, we keep the full recording and handle trimming during playback
-
             if (filePath != null) {
                 Pair(filePath, actualDuration)
             } else {
@@ -102,6 +101,15 @@ class AudioManager(private val context: Context) {
             e.printStackTrace()
             null
         }
+    }
+
+    /**
+     * Stop recording after a fixed duration
+     * Use this to automatically stop recording after RECORDING_DURATION_MS
+     * @return Pair of (filePath, actualDurationMs)
+     */
+    fun stopRecordingAfterDelay(): Pair<String, Long>? {
+        return stopRecording(0)
     }
 
     /**

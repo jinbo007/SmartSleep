@@ -27,6 +27,8 @@ import com.jinbo.smartsleep.data.database.AudioRecordingEntity
 import com.jinbo.smartsleep.data.database.SleepDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.sqrt
@@ -65,6 +67,9 @@ class SnoreDetectionService : Service() {
     private lateinit var database: SleepDatabase
     private var vibrator: Vibrator? = null
 
+    // Service scope for managing coroutines
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     // Continuous detection state
     private var consecutiveSnoreStartTime: Long = 0
     private var isTrackingSnore = false
@@ -76,6 +81,7 @@ class SnoreDetectionService : Service() {
     private val amplitudeSamples = mutableListOf<AmplitudeSampleEntity>()
     private var lastSampleTime: Long = 0
     private val SAMPLE_INTERVAL_MS = 100L // Save sample every 100ms
+    private val MAX_SAMPLES_IN_MEMORY = 500 // Limit to ~50 seconds of data in memory
 
     override fun onCreate() {
         super.onCreate()
@@ -101,14 +107,24 @@ class SnoreDetectionService : Service() {
             startForegroundService()
             sessionStartTime = System.currentTimeMillis()
 
-            // Start continuous audio recording for buffer
-            audioManager?.startRecording()
+            // Start session first to get sessionId
+            sessionManager.startSession()
+
+            // NOTE: Don't start recording continuously anymore
+            // We'll start recording only when snore is detected
 
             startAudioAnalysis()
-            sessionManager.startSession()
+
+            // Get sessionId after a brief delay to ensure database creation completes
+            serviceScope.launch {
+                delay(100) // Small delay for session creation
+                currentSessionId = sessionManager.getCurrentSessionId()
+                Log.d("SnoreService", "Session ID: $currentSessionId")
+            }
+
             isServiceRunning = true
         }
-        
+
         return START_STICKY
     }
 
@@ -192,8 +208,8 @@ class SnoreDetectionService : Service() {
                 )
             )
 
-            // Periodically flush samples to database (every 50 samples = 5 seconds)
-            if (amplitudeSamples.size >= 50) {
+            // Flush samples if we reach limit OR batch size
+            if (amplitudeSamples.size >= MAX_SAMPLES_IN_MEMORY || amplitudeSamples.size >= 50) {
                 flushAmplitudeSamples()
             }
         }
@@ -260,8 +276,8 @@ class SnoreDetectionService : Service() {
         val currentTime = System.currentTimeMillis()
         val relativeTime = currentTime - sessionStartTime
 
-        // Save audio recording for this snore event
-        saveAudioRecording(relativeTime)
+        // Start audio recording for this snore event
+        startAudioRecording(relativeTime)
 
         // Pause detection for the duration of vibration + buffer
         detectionPausedUntil = System.currentTimeMillis() + VIBRATION_COOLDOWN_MS
@@ -277,13 +293,19 @@ class SnoreDetectionService : Service() {
     }
 
     /**
-     * Save audio recording snippet around snore event
+     * Start audio recording when snore is detected
+     * Records for 20 seconds then automatically saves
      */
-    private fun saveAudioRecording(snoreTimestamp: Long) {
-        val scope = CoroutineScope(Dispatchers.IO)
-        scope.launch {
+    private fun startAudioRecording(snoreTimestamp: Long) {
+        serviceScope.launch {
             try {
-                // Stop current recording and save the snippet
+                // Start recording
+                audioManager?.startRecording() ?: return@launch
+
+                // Wait for recording duration (20 seconds)
+                delay(AudioManager.RECORDING_DURATION_MS)
+
+                // Stop and save recording
                 val result = audioManager?.stopRecording(snoreTimestamp)
 
                 if (result != null && currentSessionId > 0) {
@@ -301,15 +323,14 @@ class SnoreDetectionService : Service() {
                     )
 
                     database.audioRecordingDao().insertRecording(recording)
-                    Log.d("SnoreService", "Saved audio recording: $filePath")
+                    Log.d("SnoreService", "Saved audio recording: $filePath (${durationMs}ms)")
                 }
-
-                // Start a new recording for the next event
-                audioManager?.startRecording()
             } catch (e: Exception) {
-                Log.e("SnoreService", "Failed to save audio recording", e)
-                // Restart recording anyway
-                audioManager?.startRecording()
+                Log.e("SnoreService", "Failed to record audio", e)
+                // Ensure recording is stopped even if error occurs
+                try {
+                    audioManager?.stopRecording(snoreTimestamp)
+                } catch (ignore: Exception) {}
             }
         }
     }
@@ -318,13 +339,18 @@ class SnoreDetectionService : Service() {
      * Flush accumulated amplitude samples to database
      */
     private fun flushAmplitudeSamples() {
-        if (amplitudeSamples.isEmpty() || currentSessionId <= 0) return
+        if (amplitudeSamples.isEmpty()) return
+        if (currentSessionId <= 0) {
+            Log.w("SnoreService", "Skipping flush: invalid sessionId ($currentSessionId)")
+            return
+        }
 
-        val scope = CoroutineScope(Dispatchers.IO)
-        scope.launch {
+        serviceScope.launch {
             try {
-                database.amplitudeSampleDao().insertSamples(amplitudeSamples.toList())
-                Log.d("SnoreService", "Flushed ${amplitudeSamples.size} amplitude samples to database")
+                // Update all samples with current sessionId
+                val samplesWithSessionId = amplitudeSamples.map { it.copy(sessionId = currentSessionId) }
+                database.amplitudeSampleDao().insertSamples(samplesWithSessionId)
+                Log.d("SnoreService", "Flushed ${samplesWithSessionId.size} amplitude samples to database (sessionId: $currentSessionId)")
                 amplitudeSamples.clear()
             } catch (e: Exception) {
                 Log.e("SnoreService", "Failed to flush amplitude samples", e)
@@ -350,8 +376,10 @@ class SnoreDetectionService : Service() {
     override fun onDestroy() {
         super.onDestroy()
 
-        // Stop audio recording
-        audioManager?.cancelRecording()
+        // Stop any ongoing audio recording
+        if (audioManager?.isRecording() == true) {
+            audioManager?.cancelRecording()
+        }
         audioManager?.release()
 
         // Flush any remaining amplitude samples
@@ -366,7 +394,7 @@ class SnoreDetectionService : Service() {
 
         if (::sessionManager.isInitialized) {
             // Stop session in coroutine to handle suspend function
-            CoroutineScope(Dispatchers.IO).launch {
+            serviceScope.launch {
                 sessionManager.stopSession()
             }
         }
@@ -374,6 +402,9 @@ class SnoreDetectionService : Service() {
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
         }
+
+        // Cancel all coroutines
+        serviceScope.cancel()
     }
 
     override fun onBind(intent: Intent?): IBinder? {

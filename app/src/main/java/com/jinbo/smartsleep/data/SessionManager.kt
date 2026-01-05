@@ -21,15 +21,44 @@ class SessionManager(context: Context) {
         private const val KEY_EVENT_COUNT = "event_count"
         private const val KEY_MAX_AMPLITUDE = "max_amplitude"
         private const val KEY_SESSION_ACTIVE = "session_active"
+        private const val KEY_SESSION_ID = "session_id"
+    }
+
+    @Volatile
+    private var currentSessionId: Long = 0
+
+    /**
+     * Get the current session ID
+     */
+    fun getCurrentSessionId(): Long {
+        return currentSessionId
     }
 
     /**
      * Start a new monitoring session
+     * Creates session in database immediately to get ID for amplitude samples and recordings
      */
     fun startSession(): Boolean {
         return try {
+            val startTime = System.currentTimeMillis()
+
+            // Create session in database with placeholder data
+            scope.launch {
+                val sessionId = repository.createSession(
+                    startTime = startTime,
+                    endTime = startTime + 1, // Temporary, will be updated on stop
+                    snoreCount = 0,
+                    maxAmplitude = 0f
+                )
+                currentSessionId = sessionId
+
+                // Store session ID in prefs for recovery
+                prefs.edit().putLong(KEY_SESSION_ID, sessionId).apply()
+            }
+
+            // Also store in SharedPreferences for quick access
             prefs.edit()
-                .putLong(KEY_START_TIME, System.currentTimeMillis())
+                .putLong(KEY_START_TIME, startTime)
                 .putInt(KEY_EVENT_COUNT, 0)
                 .putFloat(KEY_MAX_AMPLITUDE, 0f)
                 .putBoolean(KEY_SESSION_ACTIVE, true)
@@ -42,7 +71,7 @@ class SessionManager(context: Context) {
     }
 
     /**
-     * Stop current session and save to database
+     * Stop current session and update in database
      */
     suspend fun stopSession(): Result<Unit> {
         return withContext(Dispatchers.IO) {
@@ -51,6 +80,7 @@ class SessionManager(context: Context) {
                 val startTime = prefs.getLong(KEY_START_TIME, 0)
                 val eventCount = prefs.getInt(KEY_EVENT_COUNT, 0)
                 val maxAmplitude = prefs.getFloat(KEY_MAX_AMPLITUDE, 0f)
+                val sessionId = prefs.getLong(KEY_SESSION_ID, 0)
 
                 // Validate session data
                 if (startTime <= 0) {
@@ -61,8 +91,13 @@ class SessionManager(context: Context) {
                     return@withContext Result.failure(IllegalStateException("Invalid session time range"))
                 }
 
-                // Save to database
-                repository.saveSession(
+                if (sessionId <= 0) {
+                    return@withContext Result.failure(IllegalStateException("Invalid session ID"))
+                }
+
+                // Update existing session in database
+                repository.updateSession(
+                    sessionId = sessionId,
                     startTime = startTime,
                     endTime = endTime,
                     snoreCount = eventCount,
@@ -74,6 +109,9 @@ class SessionManager(context: Context) {
                     .putBoolean(KEY_SESSION_ACTIVE, false)
                     .putLong(KEY_END_TIME, endTime)
                     .apply()
+
+                // Clear in-memory session ID
+                currentSessionId = 0
 
                 Result.success(Unit)
             } catch (e: Exception) {
