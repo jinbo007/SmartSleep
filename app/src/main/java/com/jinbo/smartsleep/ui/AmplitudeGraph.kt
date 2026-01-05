@@ -68,7 +68,8 @@ fun AmplitudeGraph(
             val graphHeight = height - paddingBottom
 
             // Y-Axis Scaling: Display range 0 to 1.2 * threshold
-            val maxY = threshold * 1.2f
+            // Prevent NaN by ensuring threshold is valid
+            val maxY = (threshold * 1.2f).coerceAtLeast(1f)
 
             val stepX = width / (amplitudes.size - 1).coerceAtLeast(1)
 
@@ -76,7 +77,9 @@ fun AmplitudeGraph(
             val points = amplitudes.mapIndexed { index, pair ->
                 val amplitude = pair.second
                 val x = index * stepX
-                val y = graphHeight - (amplitude / maxY * graphHeight).coerceIn(0f, graphHeight)
+                // Prevent NaN by validating amplitude before division
+                val normalizedAmplitude = if (amplitude.isNaN()) 0f else amplitude
+                val y = graphHeight - (normalizedAmplitude / maxY * graphHeight).coerceIn(0f, graphHeight)
                 Offset(x, y)
             }
 
@@ -119,7 +122,9 @@ fun AmplitudeGraph(
             }
 
             // 3. Draw threshold line with pulse animation
-            val thresholdY = graphHeight - (threshold / maxY * graphHeight)
+            // Prevent NaN by validating threshold
+            val safeThreshold = if (threshold.isNaN()) 800f else threshold
+            val thresholdY = graphHeight - (safeThreshold / maxY * graphHeight).coerceIn(0f, graphHeight)
             drawLine(
                 color = Color.Red.copy(alpha = thresholdAlpha),
                 start = Offset(0f, thresholdY),
