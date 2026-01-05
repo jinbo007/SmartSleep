@@ -56,9 +56,9 @@ fun ActionButton(
         )
     ) {
         if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.dp,
+            Text(
+                text = "⏳",
+                style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onPrimary
             )
         } else {

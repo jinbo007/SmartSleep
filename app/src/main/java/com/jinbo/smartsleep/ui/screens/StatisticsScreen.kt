@@ -118,24 +118,19 @@ fun StatisticsScreen(
             item {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium
+                    shape = MaterialTheme.shapes.medium,
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                    )
                 ) {
-                    Column(
+                    Text(
+                        text = "⏳ Loading statistics...",
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(AppDimens.card_padding),
-                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(AppDimens.spacing_3)
-                    ) {
-                        Text(
-                            text = "Loading statistics...",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(48.dp)
-                        )
-                    }
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
