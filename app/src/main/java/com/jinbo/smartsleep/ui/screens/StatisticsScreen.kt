@@ -132,8 +132,8 @@ fun StatisticsScreen(
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        LinearProgressIndicator(
-                            modifier = Modifier.fillMaxWidth()
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(48.dp)
                         )
                     }
                 }
