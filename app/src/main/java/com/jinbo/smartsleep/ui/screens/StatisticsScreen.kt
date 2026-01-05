@@ -2,9 +2,11 @@ package com.jinbo.smartsleep.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -61,22 +63,22 @@ fun StatisticsScreen(
         }
     }
 
-    PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefresh,
-        modifier = Modifier.fillMaxSize()
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(AppDimens.screen_padding),
+        contentPadding = PaddingValues(bottom = AppDimens.bottom_nav_height),
+        verticalArrangement = Arrangement.spacedBy(AppDimens.card_spacing)
     ) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(AppDimens.screen_padding),
-            contentPadding = PaddingValues(bottom = AppDimens.bottom_nav_height),
-            verticalArrangement = Arrangement.spacedBy(AppDimens.card_spacing)
-        ) {
-            // Header
-            item {
+        // Header with refresh button
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(AppDimens.spacing_2)
                 ) {
                     Text(
@@ -90,114 +92,124 @@ fun StatisticsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
 
-            // Time period selector
+                IconButton(
+                    onClick = onRefresh,
+                    enabled = !isRefreshing
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Refresh"
+                    )
+                }
+            }
+        }
+
+        // Time period selector
+        item {
+            TimePeriodSelector(
+                selectedPeriod = selectedPeriod,
+                onPeriodSelected = statisticsViewModel::selectPeriod
+            )
+        }
+
+        // Loading state
+        if (uiState is StatisticsUiState.Loading) {
             item {
-                TimePeriodSelector(
-                    selectedPeriod = selectedPeriod,
-                    onPeriodSelected = statisticsViewModel::selectPeriod
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(AppDimens.card_padding),
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(AppDimens.spacing_3)
+                    ) {
+                        Text(
+                            text = "Loading statistics...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        }
+
+        // Error state
+        if (uiState is StatisticsUiState.Error) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Text(
+                        text = "Error: ${(uiState as StatisticsUiState.Error).message}",
+                        modifier = Modifier.padding(AppDimens.card_padding),
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+        }
+
+        // Success state
+        if (uiState is StatisticsUiState.Success) {
+            val successState = uiState as StatisticsUiState.Success
+
+            // Overview cards
+            item {
+                OverviewCardsSection(
+                    stats = successState.aggregateStats
                 )
             }
 
-            // Loading state
-            if (uiState is StatisticsUiState.Loading) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(AppDimens.card_padding),
-                            horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(AppDimens.spacing_3)
-                        ) {
-                            Text(
-                                text = "Loading statistics...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            LinearProgressIndicator(
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
-                }
+            // Daily trend chart
+            item {
+                DailyTrendChart(
+                    dailyCounts = successState.dailyCounts
+                )
             }
 
-            // Error state
-            if (uiState is StatisticsUiState.Error) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
+            // Recent sessions list
+            item {
+                RecentSessionsList(
+                    sessions = sessionsList,
+                    onSessionClick = onSessionClick
+                )
+            }
+        }
+
+        // Empty state hint
+        if (uiState is StatisticsUiState.Success &&
+            (uiState as StatisticsUiState.Success).aggregateStats == null) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(AppDimens.card_padding),
+                        verticalArrangement = Arrangement.spacedBy(AppDimens.spacing_2)
                     ) {
                         Text(
-                            text = "Error: ${(uiState as StatisticsUiState.Error).message}",
-                            modifier = Modifier.padding(AppDimens.card_padding),
-                            color = MaterialTheme.colorScheme.onErrorContainer
+                            text = "No Data Yet",
+                            style = MaterialTheme.typography.titleMedium
                         )
-                    }
-                }
-            }
-
-            // Success state
-            if (uiState is StatisticsUiState.Success) {
-                val successState = uiState as StatisticsUiState.Success
-
-                // Overview cards
-                item {
-                    OverviewCardsSection(
-                        stats = successState.aggregateStats
-                    )
-                }
-
-                // Daily trend chart
-                item {
-                    DailyTrendChart(
-                        dailyCounts = successState.dailyCounts
-                    )
-                }
-
-                // Recent sessions list
-                item {
-                    RecentSessionsList(
-                        sessions = sessionsList,
-                        onSessionClick = onSessionClick
-                    )
-                }
-            }
-
-            // Empty state hint
-            if (uiState is StatisticsUiState.Success &&
-                (uiState as StatisticsUiState.Success).aggregateStats == null) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                        Text(
+                            text = "Start monitoring from the Home screen to see your sleep statistics here!",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(AppDimens.card_padding),
-                            verticalArrangement = Arrangement.spacedBy(AppDimens.spacing_2)
-                        ) {
-                            Text(
-                                text = "No Data Yet",
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                            Text(
-                                text = "Start monitoring from the Home screen to see your sleep statistics here!",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
                 }
             }

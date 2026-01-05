@@ -21,6 +21,9 @@ import com.jinbo.smartsleep.audio.AudioRecorder
 import com.jinbo.smartsleep.audio.AudioUtils
 import com.jinbo.smartsleep.data.PreferencesManager
 import com.jinbo.smartsleep.data.SessionManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlin.math.sqrt
 
 class SnoreDetectionService : Service() {
@@ -245,7 +248,10 @@ class SnoreDetectionService : Service() {
         resetSnoreTracking()
         detectionPausedUntil = 0
         if (::sessionManager.isInitialized) {
-            sessionManager.stopSession()
+            // Stop session in coroutine to handle suspend function
+            CoroutineScope(Dispatchers.IO).launch {
+                sessionManager.stopSession()
+            }
         }
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()

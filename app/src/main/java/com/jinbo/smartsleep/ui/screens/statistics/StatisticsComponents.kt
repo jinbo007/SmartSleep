@@ -26,6 +26,9 @@ import java.util.*
 // Import TimePeriod enum
 import com.jinbo.smartsleep.data.TimePeriod
 
+// Opt-in for experimental Material API
+import androidx.compose.material3.ExperimentalMaterial3Api
+
 /**
  * Overview cards section showing aggregate statistics
  */
@@ -358,6 +361,7 @@ fun RecentSessionsList(
 /**
  * Single session item in the list
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SessionListItem(
     session: SessionEntity,
