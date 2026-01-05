@@ -17,12 +17,17 @@ import androidx.core.app.NotificationCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.jinbo.smartsleep.MainActivity
 import com.jinbo.smartsleep.R
+import com.jinbo.smartsleep.audio.AudioManager
 import com.jinbo.smartsleep.audio.AudioRecorder
 import com.jinbo.smartsleep.audio.AudioUtils
 import com.jinbo.smartsleep.data.PreferencesManager
 import com.jinbo.smartsleep.data.SessionManager
+import com.jinbo.smartsleep.data.database.AmplitudeSampleEntity
+import com.jinbo.smartsleep.data.database.AudioRecordingEntity
+import com.jinbo.smartsleep.data.database.SleepDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.sqrt
 
@@ -52,10 +57,12 @@ class SnoreDetectionService : Service() {
     }
 
     private var audioRecorder: AudioRecorder? = null
+    private var audioManager: AudioManager? = null
     private var isServiceRunning = false
     private var wakeLock: PowerManager.WakeLock? = null
     private lateinit var sessionManager: SessionManager
     private lateinit var preferencesManager: PreferencesManager
+    private lateinit var database: SleepDatabase
     private var vibrator: Vibrator? = null
 
     // Continuous detection state
@@ -63,16 +70,25 @@ class SnoreDetectionService : Service() {
     private var isTrackingSnore = false
     private var detectionPausedUntil: Long = 0
 
+    // Data recording state
+    private var currentSessionId: Long = 0
+    private var sessionStartTime: Long = 0
+    private val amplitudeSamples = mutableListOf<AmplitudeSampleEntity>()
+    private var lastSampleTime: Long = 0
+    private val SAMPLE_INTERVAL_MS = 100L // Save sample every 100ms
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         sessionManager = SessionManager(this)
         preferencesManager = PreferencesManager(this)
+        database = SleepDatabase.getInstance(this)
+        audioManager = AudioManager(this)
         vibrator = getSystemService(Vibrator::class.java)
 
         val powerManager = getSystemService(PowerManager::class.java)
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SmartSleep::AudioRecordingWakeLock")
-        wakeLock?.acquire(10 * 60 * 1000L /*10 minutes timeout, will re-acquire if needed or rely on service*/)
+        wakeLock?.acquire(10 * 60 * 1000L /*10 minutes timeout*/)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -83,6 +99,11 @@ class SnoreDetectionService : Service() {
 
         if (!isServiceRunning) {
             startForegroundService()
+            sessionStartTime = System.currentTimeMillis()
+
+            // Start continuous audio recording for buffer
+            audioManager?.startRecording()
+
             startAudioAnalysis()
             sessionManager.startSession()
             isServiceRunning = true
@@ -153,6 +174,30 @@ class SnoreDetectionService : Service() {
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(ampIntent)
 
+        // Save amplitude sample to database (throttled to every SAMPLE_INTERVAL_MS)
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastSampleTime >= SAMPLE_INTERVAL_MS) {
+            lastSampleTime = currentTime
+            val relativeTime = currentTime - sessionStartTime
+
+            // Check if this is a snore event (above threshold)
+            val isSnore = rms >= rmsThreshold
+
+            amplitudeSamples.add(
+                AmplitudeSampleEntity(
+                    sessionId = currentSessionId,
+                    timestamp = relativeTime,
+                    amplitude = rms.toFloat(),
+                    isSnore = isSnore
+                )
+            )
+
+            // Periodically flush samples to database (every 50 samples = 5 seconds)
+            if (amplitudeSamples.size >= 50) {
+                flushAmplitudeSamples()
+            }
+        }
+
         // 1. Basic Silence Threshold
         if (rms < rmsThreshold) {
             resetSnoreTracking()
@@ -211,17 +256,79 @@ class SnoreDetectionService : Service() {
 
     private fun triggerVibration() {
         Log.d("SnoreService", "Snore detected! Vibrating...")
-        
+
+        val currentTime = System.currentTimeMillis()
+        val relativeTime = currentTime - sessionStartTime
+
+        // Save audio recording for this snore event
+        saveAudioRecording(relativeTime)
+
         // Pause detection for the duration of vibration + buffer
         detectionPausedUntil = System.currentTimeMillis() + VIBRATION_COOLDOWN_MS
-        
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val timings = longArrayOf(0, 1000, 500, 1000, 500, 1000)
-            val effect = VibrationEffect.createWaveform(timings, -1) 
+            val effect = VibrationEffect.createWaveform(timings, -1)
             vibrator?.vibrate(effect)
         } else {
             @Suppress("DEPRECATION")
             vibrator?.vibrate(longArrayOf(0, 1000, 500, 1000, 500, 1000), -1)
+        }
+    }
+
+    /**
+     * Save audio recording snippet around snore event
+     */
+    private fun saveAudioRecording(snoreTimestamp: Long) {
+        val scope = CoroutineScope(Dispatchers.IO)
+        scope.launch {
+            try {
+                // Stop current recording and save the snippet
+                val result = audioManager?.stopRecording(snoreTimestamp)
+
+                if (result != null && currentSessionId > 0) {
+                    val (filePath, durationMs) = result
+
+                    // Get the amplitude that triggered this recording
+                    val triggerAmplitude = amplitudeSamples.lastOrNull { it.timestamp == snoreTimestamp }?.amplitude ?: 0f
+
+                    val recording = AudioRecordingEntity(
+                        sessionId = currentSessionId,
+                        timestamp = snoreTimestamp,
+                        filePath = filePath,
+                        durationMs = durationMs,
+                        triggerAmplitude = triggerAmplitude
+                    )
+
+                    database.audioRecordingDao().insertRecording(recording)
+                    Log.d("SnoreService", "Saved audio recording: $filePath")
+                }
+
+                // Start a new recording for the next event
+                audioManager?.startRecording()
+            } catch (e: Exception) {
+                Log.e("SnoreService", "Failed to save audio recording", e)
+                // Restart recording anyway
+                audioManager?.startRecording()
+            }
+        }
+    }
+
+    /**
+     * Flush accumulated amplitude samples to database
+     */
+    private fun flushAmplitudeSamples() {
+        if (amplitudeSamples.isEmpty() || currentSessionId <= 0) return
+
+        val scope = CoroutineScope(Dispatchers.IO)
+        scope.launch {
+            try {
+                database.amplitudeSampleDao().insertSamples(amplitudeSamples.toList())
+                Log.d("SnoreService", "Flushed ${amplitudeSamples.size} amplitude samples to database")
+                amplitudeSamples.clear()
+            } catch (e: Exception) {
+                Log.e("SnoreService", "Failed to flush amplitude samples", e)
+            }
         }
     }
 
@@ -242,17 +349,28 @@ class SnoreDetectionService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+
+        // Stop audio recording
+        audioManager?.cancelRecording()
+        audioManager?.release()
+
+        // Flush any remaining amplitude samples
+        flushAmplitudeSamples()
+
         audioRecorder?.stopRecording()
         isServiceRunning = false
+
         // Reset detection state
         resetSnoreTracking()
         detectionPausedUntil = 0
+
         if (::sessionManager.isInitialized) {
             // Stop session in coroutine to handle suspend function
             CoroutineScope(Dispatchers.IO).launch {
                 sessionManager.stopSession()
             }
         }
+
         if (wakeLock?.isHeld == true) {
             wakeLock?.release()
         }

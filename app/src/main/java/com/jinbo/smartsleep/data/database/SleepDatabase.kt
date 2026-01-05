@@ -9,14 +9,15 @@ import androidx.room.RoomDatabase
  * Room database for SmartSleep app
  */
 @Database(
-    entities = [SessionEntity::class, AmplitudeSampleEntity::class],
-    version = 3,
+    entities = [SessionEntity::class, AmplitudeSampleEntity::class, AudioRecordingEntity::class],
+    version = 4,
     exportSchema = false
 )
 abstract class SleepDatabase : RoomDatabase() {
 
     abstract fun sessionDao(): SessionDao
     abstract fun amplitudeSampleDao(): AmplitudeSampleDao
+    abstract fun audioRecordingDao(): AudioRecordingDao
 
     companion object {
         private const val DATABASE_NAME = "smartsleep_database"
